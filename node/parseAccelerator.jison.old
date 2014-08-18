@@ -1,0 +1,190 @@
+
+/* description: Parses end executes mathematical expressions. */
+/*
+
+	identifiers_r "STRING" ';' 
+	identifiers_r "STRING" ',' "STRING" ';'  {  }
+	| "STRING" ';' {verilogModuleCompiler.addIdentifier($1)}
+
+	*/
+/* lexical grammar */
+
+%{
+	var verilogModuleCompiler = {
+		lineNumber:1,
+		identifiers:{}, // object of identifiers name
+		currentIdentifierLine:[],
+		name:"",
+		addToDataPath:function(moduleType,instanceName,args){
+			console.log('declaring '+moduleType+ 'of type '+moduleType +' args '+args );
+		},
+		setCurrentIdentifierSize:function(size){
+			console.log('Addind indentifiers : '+this.currentIdentifierLine + ' with size: '+size+' in line '+this.lineNumber)
+			this.size = size;
+			this.addIdentifiers();
+			this.printIdentifierInfo();
+		},
+		setName:function(n){
+			this.name = n;
+		},
+		addIdentifiers:function(){
+			var n = this.currentIdentifierLine.length;
+			for (var i = 0; i < n; ++i)
+			{
+				this.addIdentifier(this.currentIdentifierLine[i]);
+			}
+		},
+		addIdentifier:function(name){
+			// check if name was already inside,
+			//console.log('adding '+name)
+			if(this.identifiers[name]){
+				console.log('Error in module '+this.name+' the identifier '+name+' was already defined in line: '+
+					this.identifiers[name].line);
+			}else{
+				var indentifier = new identifier(this.lineNumber,this.size);
+				indentifier.setName(name);
+				this.identifiers[name] = indentifier;
+				// console.log('agrego '+name+ ' ['+this.size);
+
+			}
+		},printIdentifierInfo:function(){
+			console.log(this.identifiers);
+		}
+	};
+	identifier = function(l,size){
+		this.line = l;
+		this.size = size;
+		this.setName = function(name){
+			this.name = name;
+		}
+
+	}
+	nameIO = function (ioName,name){
+		this.ioName = ioName;
+		this.name = name;
+	};
+%}
+%lex
+
+%s comment
+%%
+
+
+\x+        {};
+[ \t]         ;
+[\[\]\(\);,:\.]   { return yytext[0];}
+module          {  return 'MODULE'; }
+input       {  return 'INPUT'; }
+output      { return 'OUTPUT'; }
+wire        {  return 'WIRE'; }
+reg         { return 'REG'; }
+endmodule	{return 'endmodule'}
+type           {return 'TYPE'; }
+end            { return 'END'; }
+[0-9]+\.[0-9]+  {  /*yylval.fval = atof(yytext);*/return 'FLOAT'; }
+[0-9]+          {  /*yylval.fval = atoi(yytext);*/return 'INT'; }
+[a-zA-Z0-9_]+    {return 'STRING'}// { yylval.sval = strdup(yytext); console.log('str!!'+yytext); return 'STRING'; }
+//.*  {http://epaperpress.com/lexandyacc/thl.htmlconsole.log("comentario\n");}
+'/*'        %{console.log("comentario!!!\n");  this.begin('comment');%}
+\n            verilogModuleCompiler.lineNumber++;
+<<EOF>>  	{return 'eof';}
+.           {console.log("Error: not Recognized: '%s'\n",yytext ); return 'INVALID';}
+
+<comment>'*/'     %{this.begin('INITIAL');console.log("Termino Comments");%}
+<comment>\n        verilogModuleCompiler.lineNumber++;
+<comment>. 		  {console.log("Estoy comment");}
+
+
+
+
+
+
+/lex
+
+/* operator associations and precedence */
+
+%left '+' '-'
+%left '*' '/'
+%left '^'
+%right '!'
+%right '%'
+%left UMINUS
+
+%start verilogModule
+
+%% /* language grammar */
+
+verilogModule:
+	moduleHeader declarations dataPaths 'endmodule' 'eof'
+	;
+
+moduleHeader:
+    "MODULE" "STRING" "(" ")" ";" {verilogModuleCompiler.name = $2}
+    ;
+
+dataPaths:
+	dataPathT 
+	| %empty
+	;
+dataPathT:
+	dataPathT dataPath
+	| dataPath 
+	;
+ dataPath:
+ 	"STRING" "STRING" '(' names ')' ';' {   }
+ 	| "STRING" "STRING" '(' namesWithNameIO ')' ';' { console.log($4);  }
+ 	| "STRING" "STRING" '(' ')' ';'
+ 	;
+
+
+ namesWithNameIO:
+ 	namesWithNameIO ',' '.' 'STRING' '(' 'STRING' ')' {  var kunt = ($1); kunt.push(new nameIO($2,$4)) }
+ 	| '.' 'STRING' '(' 'STRING' ')' {  $$ =[new nameIO($2,$4)] }
+ 	;
+declarations:
+	declaration 
+	| %empty
+	;
+declaration:
+	declaration "REG" identifiers
+	| "REG" identifiers {console.log('por aqu')}
+
+	 ; 
+
+datapath:
+	'eof'
+	;
+identifiers:
+	size identifiers_r {verilogModuleCompiler.setCurrentIdentifierSize($1);  /*verilogModuleCompiler.setCurrentIdentifierSize(Number($1))*/}
+	| identifiers_r {verilogModuleCompiler.setCurrentIdentifierSize(1)}
+	;
+
+identifiers_r:
+	names ',' "STRING" ';' { var kunt = $1; kunt.push($3); console.log('termino') }
+	| "STRING" ';' { $$=[$1]; }
+	;
+names:
+	 names ',' "STRING" {  var kunt = $1; kunt.push($3); $$ = kunt; }
+	| "STRING" { $$ = [$1] }
+	;
+
+size:
+	'[' INT ':' INT']'		{ $$ = [$2,$4]; }
+	;
+/*
+
+
+| "STRING" "STRING" '(' namesWithNameIO ')' ';' {  verilogModuleCompiler.addToDataPath($1,$2,$4) }
+
+	"STRING" ',' identifiers_r {console.log('jo '+$1); verilogModuleCompiler.addIdentifier($1)}
+	
+	| "STRING" ';' {console.log('miau '+$1); verilogModuleCompiler.addIdentifier($1)}
+
+	;
+n
+size:
+	'[' ']'		{ $$ = $0; console.log('tamTab');}
+	| %empty    {console.log('tamTab');  }
+	;
+*/
+/*names ',' "STRING" ';' {console.log('jo '+$1); verilogModuleCompiler.addIdentifier($3)}*/

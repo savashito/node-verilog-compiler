@@ -1,0 +1,188 @@
+var Module = require('./Module.js');
+var Identifier = require('./Identifier.js');
+var Assignment  = require('./Assignment.js');
+var ModuleNameIO = require('./nameIO.js');
+module.exports.Expression = require('./Expression.js');
+
+module.exports.NameIO = ModuleNameIO.NameIO;
+module.exports.ListModuleIOWires = ModuleNameIO.ListModuleIOWires;
+module.exports.AritOp = require('./AritOp.js');
+module.exports.LogicOp = require('./LogicOp.js');
+module.exports.NotOp = require('./NotOp.js');
+module.exports.NegOP = require('./NegOP.js');
+module.exports.ContinousAssign = require('./ContinousAssign.js');
+module.exports.ArrayIndices = require('./ArrayIndices.js');
+module.exports.ModuleInstance = require('./ModuleInstance.js');
+var parseString = require('xml2js').parseString;
+// module.exports.Assigment = 
+
+
+
+// static class
+	var ModuleHandler = {
+		moduleList:{},
+		currentModule:undefined,
+		startStatementLine:undefined,
+		currentLine:1,
+		topModule:undefined,
+		setTopModule:function(name){
+			console.log('settin module ',name);
+			this.topModule = this.moduleList[name];
+
+		},
+		incLine:function(){
+			this.currentLine++;
+		},
+		setStartStatementLine: function(){
+			this.startStatementLine = this.startStatementLineNext==undefined?this.currentLine:this.startStatementLineNext;
+			this.startStatementLineNext = this.currentLine;
+		},
+		addToModuleList:function(name,module){
+			if(this.moduleList[name] !== undefined){
+				console.log('Error Module ',name,' is already defined');
+			}else{
+				this.moduleList[name] = module; 
+			}
+		},
+		addModule:function(name){
+			this.currentModule = new Module(name);
+			this.addToModuleList(name,this.currentModule);
+			// this.moduleList[name] = ; // .push(this.currentModule);
+			// record the line for the next statement
+			this.setStartStatementLine();
+		},
+		addAssign:function(lval,rval){
+			var mod = this.getCurrentModule();
+			var v = {lval:lval,rval:rval,line:this.startStatementLineNext};
+			//console.log('addAssign.lval',lval);
+			// add the current line just in case the identifier is not found
+			mod.addAssign(new Assignment(v));
+		},
+		generateAcelleratorCode:function(callback){
+			var me = this;
+			// get the accelerator architecture file
+			this.loadAcceleratorArchitectureFile(function(){
+					var code = me.topModule.generateAcelleratorCode(me.moduleList);
+					callback(code);
+			});
+			// for (var i = this.moduleList.length - 1; i >= 0; i--) {
+			// var topModule = this.moduleList[i];
+			//};
+
+		},
+		loadAcceleratorArchitectureFile:function(callback){
+			var fs = require('fs');
+			var me = this;
+			var accArch = fs.readFile('../Architecture/Accelerator/130nm.xml',function(err,data){
+				parseString(data, function (err, result) {
+					var arch = result.architecture;
+					var models = arch.models;
+					// load each module as if it was declared before
+					var model = models[0].model;
+					var names = [];
+					for (var i = model.length - 1; i >= 0; i--) {
+						var currentModule = model[i];
+						var name = currentModule.$.name;
+						var inputs = currentModule.input_ports[0];
+						var outputs = currentModule.output_ports[0];
+						var arrayInputs = ModuleHandler.getArrayIO(inputs);
+						var arrayOutputs = ModuleHandler.getArrayIO(outputs);
+						var moduleInstance = new Module(name);
+						// console.log('array in ',arrayInputs);
+						// add inputs
+						for (var j = arrayInputs.length - 1; j >= 0; j--) {
+
+							// console.log('inpt',arrayInputs[j]);
+							moduleInstance.addInputToModule([arrayInputs[j]],1,1);
+
+						};
+						
+						// add outputs
+						for (var j = arrayOutputs.length - 1; j >= 0; j--) {
+							moduleInstance.addOutputToModule([arrayOutputs[j]],1,1);
+						};
+						// console.log('added module',moduleInstance);
+						// print module thing 
+						me.addToModuleList(name,moduleInstance);
+						//var arrayOutputs = ModuleHandler.getArrayIO(outputs);
+						//names.push(params.name);
+						//console.log(params.name);
+					};
+				});
+			callback();
+			});
+		},
+		getArrayIO:function(inputs){
+			var inputPorts = inputs.port;
+			// console.log('inputPorts',inputPorts);
+			arrayInputs = [];
+			for (var j = inputPorts.length - 1; j >= 0; j--) {
+				var t = inputPorts[j].$;
+				arrayInputs.push(t.name);			
+			};
+			return arrayInputs;
+		},
+		addModuleInstance:function(moduleInstance)
+		{			
+
+			moduleInstance.setInstanceLine(this.startStatementLineNext);
+			this.getCurrentModule().addModuleInstance(moduleInstance);
+			return moduleInstance;
+		},
+		getIdentifier:function(name){
+			// verifies if the current identifier was delcared in this moduel
+			var module = this.getCurrentModule();
+			var identf = module.getIdentifier(name);
+			if(identf==undefined){
+				console.log('Error! ',name,' is used in line ',this.currentLine,' but was never delared');
+			}
+			return identf;
+		},
+		getCurrentModule:function(){
+			return this.currentModule;
+		},
+		// add a single line of identifiers 
+		addIdentifier:function(identifiers){
+			// identifiers = [{size:[number,number],identifiers:,type:[]}];
+			var types = identifiers.type;
+			var currentModule = this.getCurrentModule();
+			//currentModule.addIdentifiers[types[0]](identifiers.identifiers,identifiers.size,this.currentLine-1);
+			var n = types.length;
+			for (var i = 0 ; i <n; i++) 
+			{
+				var type = types[i];
+				//console.log('Testing:',currentModule.addIdentifiers);
+				// console.log('Adding type:',currentModule.addIdentifiers[type]);
+				currentModule.addIdentifiers[type](identifiers.identifiers,identifiers.size,this.currentLine-1);
+			};
+
+		/*
+			for (var i = identifiers.length - 1; i >= 0; i--) {
+				identifiers[i]
+			};
+		*/	
+		}
+	};
+
+	
+
+
+
+module.exports.Module =Module;
+module.exports.ModuleHandler = ModuleHandler;
+
+
+
+
+
+/*
+
+	var Reg = function(obj){
+		this.Identifier(obj);
+		this.type = 'REG';
+	}
+	// inhereat the functions
+	Reg.prototype = Identifier.prototype;
+	// inheret contructor also
+	Reg.prototype.Identifier = Identifier;
+*/
